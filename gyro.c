@@ -1,16 +1,13 @@
 #include <main.h>
 
 
-
-
-
-
 static HAL_StatusTypeDef GYRO_Collect(void);
 static void GYRO_Calculate(void);
-
-
-//gyro
+static void GYRO_Write(uint8_t, uint8_t);
+static void GYRO_Read(uint8_t);
 static void GYRO_Init(void);
+
+
 uint16_t time1;
 uint16_t time2;
 int16_t x_Rate;
@@ -28,13 +25,27 @@ int16_t z_Final;
 uint8_t buffer_tx[2];
 uint8_t buffer_rx[2];
 
-static HAL_StatusTypeDef GYRO_Collect(void) {
-	buffer_tx[0] = 0x27 | 0x80;
+static void GYRO_Write(uint8_t addr, uint8_t data) {
+	buffer_tx[0] = addr;
+	buffer_tx[1] = data;
+	HAL_GPIO_WritePin(SPI5_GYRO_CE_GPIO_Port, SPI5_GYRO_CE_Pin, GPIO_PIN_RESET);
+	HAL_SPI_Transmit(&hspi5, buffer_tx, 2, 10);
+	HAL_GPIO_WritePin(SPI5_GYRO_CE_GPIO_Port, SPI5_GYRO_CE_Pin, GPIO_PIN_SET);
+	HAL_Delay(10);	
+}
+	
+
+static void GYRO_Read(uint8_t addr) {
+	buffer_tx[0] = addr | 0x80;
 	HAL_GPIO_WritePin(SPI5_GYRO_CE_GPIO_Port, SPI5_GYRO_CE_Pin, GPIO_PIN_RESET);
 	HAL_SPI_TransmitReceive(&hspi5, buffer_tx, buffer_rx, 2, 10);
 	HAL_GPIO_WritePin(SPI5_GYRO_CE_GPIO_Port, SPI5_GYRO_CE_Pin, GPIO_PIN_SET);
 	HAL_Delay(10);	
+	
+}
+static HAL_StatusTypeDef GYRO_Collect(void) {
 		
+	GYRO_Read(0x27);
 		//check bit 3 in status register to see if new data is available.
 	if ((buffer_rx[1] & (1 << 3)) == 8) {
 		
@@ -45,55 +56,33 @@ static HAL_StatusTypeDef GYRO_Collect(void) {
 		time1 = time2;
 			
 		//Read X
-		buffer_tx[0] = 0x28 | 0x80;
-		HAL_GPIO_WritePin(SPI5_GYRO_CE_GPIO_Port, SPI5_GYRO_CE_Pin, GPIO_PIN_RESET);
-		HAL_SPI_TransmitReceive(&hspi5, buffer_tx, buffer_rx, 2, 10);
-		HAL_GPIO_WritePin(SPI5_GYRO_CE_GPIO_Port, SPI5_GYRO_CE_Pin, GPIO_PIN_SET);
-		HAL_Delay(10);
+		
+		GYRO_Read(0x28);
 			
 		x_Rate = buffer_rx[1];
 		
-		buffer_tx[0] = 0x29 | 0x80;
-		HAL_GPIO_WritePin(SPI5_GYRO_CE_GPIO_Port, SPI5_GYRO_CE_Pin, GPIO_PIN_RESET);
-		HAL_SPI_TransmitReceive(&hspi5, buffer_tx, buffer_rx, 2, 10);
-		HAL_GPIO_WritePin(SPI5_GYRO_CE_GPIO_Port, SPI5_GYRO_CE_Pin, GPIO_PIN_SET);
-		HAL_Delay(10);
+		GYRO_Read(0x29);
 			
 		x_Rate |= (buffer_rx[1] << 8);
 		x_Rate = (~x_Rate) + 1;
 			
 		//Read Y
-		buffer_tx[0] = 0x2A | 0x80;
-		HAL_GPIO_WritePin(SPI5_GYRO_CE_GPIO_Port, SPI5_GYRO_CE_Pin, GPIO_PIN_RESET);
-		HAL_SPI_TransmitReceive(&hspi5, buffer_tx, buffer_rx, 2, 10);
-		HAL_GPIO_WritePin(SPI5_GYRO_CE_GPIO_Port, SPI5_GYRO_CE_Pin, GPIO_PIN_SET);
-		HAL_Delay(10);
+		
+		GYRO_Read(0x2A);
 			
 		y_Rate = buffer_rx[1];
 		
-		buffer_tx[0] = 0x2b | 0x80;
-		HAL_GPIO_WritePin(SPI5_GYRO_CE_GPIO_Port, SPI5_GYRO_CE_Pin, GPIO_PIN_RESET);
-		HAL_SPI_TransmitReceive(&hspi5, buffer_tx, buffer_rx, 2, 10);
-		HAL_GPIO_WritePin(SPI5_GYRO_CE_GPIO_Port, SPI5_GYRO_CE_Pin, GPIO_PIN_SET);
-		HAL_Delay(10);
+		GYRO_Read(0x2b);
 			
 		y_Rate |= (buffer_rx[1] << 8);
 		y_Rate = (~y_Rate) + 1;
 		
 		//Read Z	
-		buffer_tx[0] = 0x2C | 0x80;
-		HAL_GPIO_WritePin(SPI5_GYRO_CE_GPIO_Port, SPI5_GYRO_CE_Pin, GPIO_PIN_RESET);
-		HAL_SPI_TransmitReceive(&hspi5, buffer_tx, buffer_rx, 2, 10);
-		HAL_GPIO_WritePin(SPI5_GYRO_CE_GPIO_Port, SPI5_GYRO_CE_Pin, GPIO_PIN_SET);
-		HAL_Delay(10);
+		GYRO_Read(0x2C);
 		
 		z_Rate = buffer_rx[1];
 		
-		buffer_tx[0] = 0x2D | 0x80;
-		HAL_GPIO_WritePin(SPI5_GYRO_CE_GPIO_Port, SPI5_GYRO_CE_Pin, GPIO_PIN_RESET);
-		HAL_SPI_TransmitReceive(&hspi5, buffer_tx, buffer_rx, 2, 10);
-		HAL_GPIO_WritePin(SPI5_GYRO_CE_GPIO_Port, SPI5_GYRO_CE_Pin, GPIO_PIN_SET);
-		HAL_Delay(10);
+		GYRO_Read(0x2D);
 			
 		z_Rate |= (buffer_rx[1] << 8);	
 		z_Rate = (~z_Rate) + 1;	
@@ -127,29 +116,16 @@ static void GYRO_Calculate(void) {
 
 static void GYRO_Init(void) {
 	//configure main control register, enabling x y and z axis.
-	buffer_tx[0] = 0x20;
-	buffer_tx[1] = 0xFF;
-	HAL_GPIO_WritePin(SPI5_GYRO_CE_GPIO_Port, SPI5_GYRO_CE_Pin, GPIO_PIN_RESET);
-	HAL_SPI_Transmit(&hspi5, buffer_tx, 2, 50);
-	HAL_GPIO_WritePin(SPI5_GYRO_CE_GPIO_Port, SPI5_GYRO_CE_Pin, GPIO_PIN_SET);
-	HAL_Delay(10);
+	GYRO_Write(0x20, 0xff);
 	
 	//TODO: Possibly change high pass filter settings IN CTRL REG 2
-	buffer_tx[0] = 0x21;
-	buffer_tx[1] = 0x04;
-	HAL_GPIO_WritePin(SPI5_GYRO_CE_GPIO_Port, SPI5_GYRO_CE_Pin, GPIO_PIN_RESET);
-	HAL_SPI_Transmit(&hspi5, buffer_tx, 2, 50);
-	HAL_GPIO_WritePin(SPI5_GYRO_CE_GPIO_Port, SPI5_GYRO_CE_Pin, GPIO_PIN_SET);
-	HAL_Delay(10);
+	
+	GYRO_Write(0x21, 0x04);
 	//CTRL 3 Already = 0, all interrupt features disabled by default.
 	
 	//CTRL 4, DPI. The Endianness is already fine as is (LSB at lower address)
-	buffer_tx[0] = 0x23;
-	buffer_tx[1] = 0x30;
-	HAL_GPIO_WritePin(SPI5_GYRO_CE_GPIO_Port, SPI5_GYRO_CE_Pin, GPIO_PIN_RESET);
-	HAL_SPI_Transmit(&hspi5, buffer_tx, 2, 50);
-	HAL_GPIO_WritePin(SPI5_GYRO_CE_GPIO_Port, SPI5_GYRO_CE_Pin, GPIO_PIN_SET);
-	HAL_Delay(10);
+	
+	GYRO_Write(0x23, 0x30);
 	
 }
 
